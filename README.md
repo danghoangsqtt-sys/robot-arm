@@ -51,37 +51,37 @@ Phần mềm điều khiển yêu cầu **Python 3.8+**.
 ### 1. Lưu đồ hoạt động tổng thể của Hệ thống
 ```mermaid
 graph TD
-    A[Bật nguồn hệ thống] --> B[Khởi tạo ESP32 & PCA9685]
-    B --> C[Thiết lập gốc tọa độ (Home) cho Servo]
-    C --> D[Chờ kết nối Serial từ Máy tính]
-    D --> E[Phần mềm Python gửi lệnh kết nối]
-    E --> F{Nhận lệnh hợp lệ?}
-    F -- Có --> G[Trích xuất lệnh và tham số góc quay]
-    G --> H[Điều khiển Servo qua I2C / PCA9685]
-    H --> I[Gửi phản hồi OK/STA về phần mềm]
+    A["Bật nguồn hệ thống"] --> B["Khởi tạo ESP32 & PCA9685"]
+    B --> C["Thiết lập gốc tọa độ (Home) cho Servo"]
+    C --> D["Chờ kết nối Serial từ Máy tính"]
+    D --> E["Phần mềm Python gửi lệnh kết nối"]
+    E --> F{"Nhận lệnh hợp lệ?"}
+    F -- "Có" --> G["Trích xuất lệnh và tham số góc quay"]
+    G --> H["Điều khiển Servo qua I2C / PCA9685"]
+    H --> I["Gửi phản hồi OK/STA về phần mềm"]
     I --> F
-    F -- Không --> D
+    F -- "Không" --> D
 ```
 
 ### 2. Lưu đồ xử lý lệnh Serial của Firmware
 ```mermaid
 graph TD
-    A[Nhận chuỗi dữ liệu qua Serial] --> B[Lọc bỏ ký tự thừa]
-    B --> C{Lệnh là gì?}
+    A["Nhận chuỗi dữ liệu qua Serial"] --> B["Lọc bỏ ký tự thừa"]
+    B --> C{"Lệnh là gì?"}
     
-    C -- "M (Move)" --> D[Phân tích ID khớp và Góc quay]
-    D --> E[Giới hạn góc quay MIN/MAX]
-    E --> F[Cập nhật PWM cho Servo PCA9685]
-    F --> G[Trả về: OK]
+    C -- "M (Move)" --> D["Phân tích ID khớp và Góc quay"]
+    D --> E["Giới hạn góc quay MIN/MAX"]
+    E --> F["Cập nhật PWM cho Servo PCA9685"]
+    F --> G["Trả về: OK"]
 
-    C -- "H (Home)" --> H[Lấy giá trị Home từ EEPROM/Config]
-    H --> I[Đưa tất cả servo về Home]
+    C -- "H (Home)" --> H["Lấy giá trị Home từ EEPROM/Config"]
+    H --> I["Đưa tất cả servo về Home"]
     I --> G
 
-    C -- "T (Telemetry)" --> J[Đọc trạng thái và góc quay hiện tại]
-    J --> K[Trả về: STA:a0,a1,a2,a3,a4,a5]
+    C -- "T (Telemetry)" --> J["Đọc trạng thái và góc quay hiện tại"]
+    J --> K["Trả về: STA:a0,a1,a2,a3,a4,a5"]
 
-    C -- "Lỗi cú pháp" --> L[Trả về: ERR:Invalid Command]
+    C -- "Lỗi cú pháp" --> L["Trả về: ERR:Invalid Command"]
 ```
 
 ---
