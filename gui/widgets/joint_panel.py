@@ -1,14 +1,14 @@
 """
-widgets/joint_panel.py – Control panel for all six arm joints.
+widgets/joint_panel.py – Bảng điều khiển cho cả sáu khớp của cánh tay robot.
 
-Each joint row contains:
-  • Angle slider  (sends M command on release / live-mode)
-  • Direct angle entry field
-  • Speed slider
-  • Moving indicator
-  • Individual Home button
+Mỗi hàng khớp bao gồm:
+  • Thanh trượt góc (gửi lệnh M khi thả chuột / ở chế độ trực tiếp)
+  • Trường nhập góc trực tiếp
+  • Thanh trượt tốc độ
+  • Đèn báo đang di chuyển
+  • Nút đưa về gốc (Home) của từng khớp riêng biệt
 
-A global "Live" toggle at the top sends commands while dragging.
+Nút gạt "Live send" (gửi trực tiếp) trên cùng cho phép gửi lệnh trong khi đang kéo thanh trượt.
 """
 
 import tkinter as tk
@@ -17,12 +17,12 @@ from tkinter import ttk
 from config import C, JOINTS, NUM_JOINTS, FONT_LABEL, FONT_BOLD, FONT_SMALL, FONT_MONO
 
 
-#  Single joint row 
+#  Hàng của một khớp đơn lẻ (Single joint row) 
 
 class _JointRow(tk.Frame):
-    """One row: controls for a single joint."""
+    """Một hàng: Các nút điều khiển cho một khớp duy nhất."""
 
-    LIVE_THROTTLE_MS = 60   # minimum ms between live sends
+    LIVE_THROTTLE_MS = 60   # số mili-giây tối thiểu giữa các lần gửi lệnh trực tiếp (live mode)
 
     def __init__(self, master, joint_id: int, send_fn, live_var: tk.BooleanVar, **kwargs):
         super().__init__(master, bg=C["surface"], **kwargs)
@@ -38,29 +38,29 @@ class _JointRow(tk.Frame):
         self._angle_var = tk.IntVar(value=home)
         self._speed_var = tk.IntVar(value=spd)
         self._moving    = False
-        self._throttle_id = None   # after() handle for live throttle
+        self._throttle_id = None   # biến theo dõi hàm after() để giới hạn tốc độ gửi
 
         self._build(name, lo, hi, home, spd)
         self._angle_var.trace_add("write", self._on_angle_trace)
 
-    #  Build 
+    #  Khởi tạo (Build) 
 
     def _build(self, name, lo, hi, home, spd):
-        self.columnconfigure(2, weight=1)   # slider column expands
+        self.columnconfigure(2, weight=1)   # cột của thanh trượt sẽ tự dãn ra
 
-        #  J label 
+        #  Nhãn ID khớp (J label) 
         tk.Label(
             self, text=f"J{self._id}", width=3,
             bg=C["surface"], fg=C["accent"], font=FONT_BOLD, anchor="e"
         ).grid(row=0, column=0, sticky="e", padx=(6, 2))
 
-        #  Joint name 
+        #  Tên khớp (Joint name) 
         tk.Label(
             self, text=name, width=11,
             bg=C["surface"], fg=C["text"], font=FONT_LABEL, anchor="w"
         ).grid(row=0, column=1, sticky="w", padx=(0, 6))
 
-        #  Angle slider 
+        #  Thanh trượt góc (Angle slider) 
         self._slider = tk.Scale(
             self, from_=lo, to=hi, orient="horizontal",
             variable=self._angle_var, showvalue=False,
@@ -71,7 +71,7 @@ class _JointRow(tk.Frame):
         self._slider.grid(row=0, column=2, sticky="ew", padx=4)
         self._slider.bind("<ButtonRelease-1>", self._on_slider_release)
 
-        #  Min / Max labels 
+        #  Nhãn Min / Max (Min / Max labels) 
         tk.Label(
             self, text=str(lo), width=3,
             bg=C["surface"], fg=C["dim"], font=FONT_SMALL, anchor="e"
@@ -81,7 +81,7 @@ class _JointRow(tk.Frame):
             bg=C["surface"], fg=C["dim"], font=FONT_SMALL, anchor="w"
         ).grid(row=0, column=4)
 
-        #  Angle entry 
+        #  Khung nhập góc (Angle entry) 
         self._entry_var = tk.StringVar(value=str(home))
         entry = tk.Entry(
             self, textvariable=self._entry_var, width=4,
@@ -99,7 +99,7 @@ class _JointRow(tk.Frame):
         tk.Label(self, text="°", bg=C["surface"],
                  fg=C["dim"], font=FONT_SMALL).grid(row=0, column=6)
 
-        #  Speed label + mini-slider 
+        #  Nhãn tốc độ + thanh trượt nhỏ (Speed label + mini-slider) 
         tk.Label(self, text="Spd", bg=C["surface"],
                  fg=C["dim"], font=FONT_SMALL).grid(row=0, column=7, padx=(10, 2))
 
@@ -119,14 +119,14 @@ class _JointRow(tk.Frame):
         )
         self._spd_lbl.grid(row=0, column=9, padx=(2, 8))
 
-        #  Moving indicator 
+        #  Đèn báo đang di chuyển (Moving indicator) 
         self._moving_lbl = tk.Label(
             self, text="", width=6,
             bg=C["surface"], fg=C["orange"], font=FONT_SMALL
         )
         self._moving_lbl.grid(row=0, column=10, padx=(0, 4))
 
-        #  Home button 
+        #  Nút về gốc (Home button) 
         tk.Button(
             self, text="⌂", font=FONT_BOLD, width=2,
             bg=C["surface2"], fg=C["accent"], relief="flat",
@@ -134,10 +134,10 @@ class _JointRow(tk.Frame):
             cursor="hand2", command=self._do_home,
         ).grid(row=0, column=11, padx=(0, 8))
 
-    #  Event handlers 
+    #  Trình xử lý sự kiện (Event handlers) 
 
     def _on_angle_trace(self, *_):
-        """Trace fires on every slider move – throttle in live mode."""
+        """Hàm trace được kích hoạt ở mỗi lần kéo thanh trượt – giới hạn tần suất trong chế độ trực tiếp."""
         if not self._live_var.get():
             return
         if self._throttle_id:
@@ -145,7 +145,7 @@ class _JointRow(tk.Frame):
         self._throttle_id = self.after(self.LIVE_THROTTLE_MS, self._send_move)
 
     def _on_slider_release(self, _event):
-        """Always send on mouse release (even in non-live mode)."""
+        """Luôn luôn gửi khi nhả chuột (ngay cả trong chế độ không trực tiếp)."""
         if self._throttle_id:
             self.after_cancel(self._throttle_id)
             self._throttle_id = None
@@ -170,6 +170,16 @@ class _JointRow(tk.Frame):
         self._angle_var.set(val)
         self._send_move()
 
+    def nudge_quiet(self, delta: int) -> bool:
+        """Thay đổi góc mà không gửi lệnh M riêng lẻ, dùng cho điều khiển bàn phím."""
+        old_val = self._angle_var.get()
+        val = max(self._lo, min(self._hi, old_val + delta))
+        if val != old_val:
+            self._angle_var.set(val)
+            self._entry_var.set(str(val))
+            return True
+        return False
+
     def _send_move(self):
         ang = self._angle_var.get()
         self._entry_var.set(str(ang))
@@ -178,10 +188,10 @@ class _JointRow(tk.Frame):
     def _do_home(self):
         self._send(f"H {self._id}")
 
-    #  Public API 
+    #  Các hàm Public API (Public API) 
 
     def set_angle(self, angle: int):
-        """Update display (called when STA/VAL response arrives)."""
+        """Cập nhật giao diện (được gọi khi phản hồi STA/VAL đến)."""
         self._angle_var.set(angle)
         self._entry_var.set(str(angle))
 
@@ -196,7 +206,7 @@ class _JointRow(tk.Frame):
         return self._speed_var.get()
 
     def set_limits(self, lo: int, hi: int, home: int, speed: int):
-        """Update limits from CFG response."""
+        """Cập nhật các giới hạn từ phản hồi CFG."""
         self._lo   = lo
         self._hi   = hi
         self._home = home
@@ -204,26 +214,26 @@ class _JointRow(tk.Frame):
         self._speed_var.set(speed)
 
 
-#  Container for all joint rows 
+#  Khung chứa tất cả các hàng khớp (Container for all joint rows) 
 
 class JointsPanel(tk.Frame):
     """
-    Scrollable panel that stacks one _JointRow per joint.
-    Exposes set_angle() / set_all() so the app can push
-    responses from the firmware.
+    Bảng cuộn chứa tất cả các _JointRow cho mỗi khớp.
+    Cung cấp các hàm set_angle() / set_all() để ứng dụng chính
+    có thể đẩy phản hồi từ firmware lên giao diện.
     """
 
     def __init__(self, master, send_fn, **kwargs):
         super().__init__(master, bg=C["surface"], **kwargs)
         self._send = send_fn
 
-        # Live-mode toggle (shared across all rows)
+        # Nút gạt chế độ trực tiếp (chia sẻ qua tất cả các hàng)
         self._live_var = tk.BooleanVar(value=False)
 
         self._build()
 
     def _build(self):
-        #  Header 
+        #  Phần đầu (Header) 
         hdr = tk.Frame(self, bg=C["surface2"], pady=4)
         hdr.pack(fill="x", padx=0, pady=(0, 4))
 
@@ -241,7 +251,7 @@ class JointsPanel(tk.Frame):
         )
         live_chk.pack(side="right", padx=10)
 
-        #  Separator 
+        #  Đường phân cách (Separator) 
         col_hdr = tk.Frame(self, bg=C["surface"], pady=2)
         col_hdr.pack(fill="x")
         for col, txt, w in [
@@ -255,7 +265,7 @@ class JointsPanel(tk.Frame):
 
         ttk.Separator(self, orient="horizontal").pack(fill="x", pady=2)
 
-        #  Joint rows 
+        #  Danh sách hàng (Joint rows) 
         self._rows: list[_JointRow] = []
         for i in range(NUM_JOINTS):
             row = _JointRow(
@@ -266,7 +276,7 @@ class JointsPanel(tk.Frame):
             row.pack(fill="x", pady=3)
             self._rows.append(row)
 
-            # Alternate background
+            # Tô màu nền xen kẽ nhau
             if i % 2 == 1:
                 row.config(bg=C["surface2"])
                 for child in row.winfo_children():
@@ -297,3 +307,14 @@ class JointsPanel(tk.Frame):
 
     def get_all_angles(self) -> list[int]:
         return [r.get_angle() for r in self._rows]
+
+    def nudge_joints(self, deltas: dict[int, int]):
+        """Nudge nhiều khớp cùng lúc và chỉ gửi 1 lệnh A."""
+        changed = False
+        for j_id, d in deltas.items():
+            if 0 <= j_id < NUM_JOINTS:
+                if self._rows[j_id].nudge_quiet(d):
+                    changed = True
+        if changed:
+            angles = self.get_all_angles()
+            self._send("A " + " ".join(str(a) for a in angles))

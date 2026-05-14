@@ -1,14 +1,14 @@
 """
-widgets/control_bar.py – Bottom toolbar with global arm actions.
+widgets/control_bar.py – Thanh công cụ bên dưới với các hành động chung cho cánh tay robot.
 
-Buttons:
-  Home All  – sends H
-  Stop      – sends X  (emergency halt, highlighted red)
-  Move All  – reads all sliders and sends A command
-  Query     – sends T  (refresh all angles from firmware)
-  Wait      – sends W  (blocks until arm is idle, then DONE)
+Các nút chức năng:
+  Home All  – gửi lệnh H (đưa tất cả về gốc)
+  Stop      – gửi lệnh X (dừng khẩn cấp, được tô màu đỏ)
+  Move All  – đọc tất cả thanh trượt và gửi lệnh A
+  Query     – gửi lệnh T (làm mới tất cả các góc từ firmware)
+  Wait      – gửi lệnh W (chặn cho đến khi cánh tay nhàn rỗi, sau đó nhận DONE)
 
-Status indicator shows: Idle / Moving / Waiting / Disconnected.
+Hiển thị trạng thái gồm: Idle (Nhàn rỗi) / Moving (Đang di chuyển) / Waiting (Đang chờ) / Disconnected (Mất kết nối).
 """
 
 import tkinter as tk
@@ -19,8 +19,8 @@ from config import C, NUM_JOINTS, FONT_BOLD, FONT_LABEL, FONT_SMALL
 
 class ControlBar(tk.Frame):
     """
-    Bottom action bar. `get_angles_fn` is called on 'Move All'
-    to collect current slider values.
+    Thanh chức năng bên dưới. Hàm `get_angles_fn` được gọi khi ấn nút 'Move All'
+    để thu thập các giá trị thanh trượt hiện tại.
     """
 
     def __init__(self, master, send_fn, get_angles_fn, **kwargs):
@@ -31,7 +31,7 @@ class ControlBar(tk.Frame):
         self._build()
 
     def _build(self):
-        #  Arm action buttons 
+        #  Các nút điều khiển tay robot (Arm action buttons) 
         buttons = [
             ("⌂  Home All",   self._do_home,     C["accent"],  C["bg"]),
             ("■  Stop",        self._do_stop,     C["red"],     C["bg"]),
@@ -50,12 +50,12 @@ class ControlBar(tk.Frame):
                 cursor="hand2",
             ).grid(row=0, column=i, padx=6)
 
-        #  Separator 
+        #  Đường phân cách (Separator) 
         ttk.Separator(self, orient="vertical").grid(
             row=0, column=len(buttons), padx=16, sticky="ns"
         )
 
-        #  Status display 
+        #  Hiển thị trạng thái (Status display) 
         tk.Label(
             self, text="Status:", bg=C["surface"],
             fg=C["dim"], font=FONT_SMALL
@@ -68,7 +68,7 @@ class ControlBar(tk.Frame):
         )
         self._status_label.grid(row=0, column=len(buttons) + 2)
 
-    #  Button actions 
+    #  Các hành động của nút bấm (Button actions) 
 
     def _do_home(self):
         self._send("H")
@@ -90,7 +90,7 @@ class ControlBar(tk.Frame):
         self._send("W")
         self.set_status("Waiting…", C["orange"])
 
-    #  Public API 
+    #  Các hàm Public API (Public API) 
 
     def set_status(self, text: str, color: str = C["text"]):
         self._status_var.set(text)

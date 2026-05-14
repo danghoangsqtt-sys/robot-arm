@@ -1,8 +1,8 @@
 """
-widgets/connection_bar.py – Serial port connection toolbar.
+widgets/connection_bar.py – Thanh công cụ kết nối cổng Serial.
 
-Provides port selection, baud rate dropdown, connect/disconnect button,
-a port-refresh button, and a status indicator LED.
+Cung cấp các nút để chọn cổng, chọn baud rate (tốc độ baud), nút kết nối/ngắt kết nối,
+nút làm mới danh sách cổng và đèn LED báo trạng thái.
 """
 
 import tkinter as tk
@@ -15,8 +15,8 @@ from serial_comm import SerialComm
 
 class ConnectionBar(tk.Frame):
     """
-    Top-bar widget that owns the SerialComm instance and exposes
-    `on_connect` / `on_disconnect` callbacks so the parent app can react.
+    Widget thanh trên cùng (top-bar) sở hữu đối tượng SerialComm và cung cấp
+    các callback `on_connect` / `on_disconnect` để ứng dụng chính có thể phản hồi.
     """
 
     def __init__(self, master, comm: SerialComm,
@@ -29,10 +29,10 @@ class ConnectionBar(tk.Frame):
 
         self._build()
 
-    #  Build UI 
+    #  Xây dựng giao diện (Build UI) 
 
     def _build(self):
-        #  LED indicator 
+        #  Đèn LED trạng thái (LED indicator) 
         self._led = tk.Canvas(
             self, width=14, height=14,
             bg=C["surface"], highlightthickness=0
@@ -40,7 +40,7 @@ class ConnectionBar(tk.Frame):
         self._led_oval = self._led.create_oval(2, 2, 12, 12, fill=C["dim"], outline="")
         self._led.grid(row=0, column=0, padx=(0, 8))
 
-        #  Port selector 
+        #  Trình chọn cổng (Port selector) 
         tk.Label(self, text="Port", bg=C["surface"],
                  fg=C["dim"], font=FONT_SMALL).grid(row=0, column=1, padx=(0, 4))
 
@@ -51,7 +51,7 @@ class ConnectionBar(tk.Frame):
         )
         self._port_cb.grid(row=0, column=2, padx=(0, 6))
 
-        # Refresh ports button
+        # Nút làm mới danh sách cổng
         tk.Button(
             self, text="⟳", font=FONT_BOLD,
             bg=C["surface2"], fg=C["text"], relief="flat",
@@ -60,7 +60,7 @@ class ConnectionBar(tk.Frame):
             width=2,
         ).grid(row=0, column=3, padx=(0, 12))
 
-        #  Baud selector 
+        #  Trình chọn tốc độ baud (Baud selector) 
         tk.Label(self, text="Baud", bg=C["surface"],
                  fg=C["dim"], font=FONT_SMALL).grid(row=0, column=4, padx=(0, 4))
 
@@ -71,7 +71,7 @@ class ConnectionBar(tk.Frame):
             width=8, state="readonly", font=FONT_LABEL
         ).grid(row=0, column=5, padx=(0, 14))
 
-        #  Connect / Disconnect button 
+        #  Nút Kết nối / Ngắt kết nối (Connect / Disconnect button) 
         self._btn = tk.Button(
             self, text="Connect", width=11, font=FONT_BOLD,
             bg=C["accent"], fg=C["bg"], relief="flat",
@@ -80,7 +80,7 @@ class ConnectionBar(tk.Frame):
         )
         self._btn.grid(row=0, column=6, padx=(0, 16))
 
-        #  Status text 
+        #  Dòng trạng thái (Status text) 
         tk.Label(self, text="Status:", bg=C["surface"],
                  fg=C["dim"], font=FONT_SMALL).grid(row=0, column=7, padx=(0, 4))
         self._status_var = tk.StringVar(value="Disconnected")
@@ -91,7 +91,7 @@ class ConnectionBar(tk.Frame):
 
         self._refresh_ports()
 
-    #  Port management 
+    #  Quản lý cổng (Port management) 
 
     def _refresh_ports(self):
         ports = SerialComm.list_ports()
@@ -99,7 +99,7 @@ class ConnectionBar(tk.Frame):
         if ports and not self._port_var.get():
             self._port_var.set(ports[0])
 
-    #  Connect / disconnect 
+    #  Kết nối / Ngắt kết nối (Connect / disconnect) 
 
     def _toggle(self):
         if self._connected:
@@ -140,7 +140,7 @@ class ConnectionBar(tk.Frame):
             self._status_var.set("Disconnected")
             self._update_status_color(C["dim"])
 
-    # Called by main app when an unexpected disconnect sentinel arrives
+    # Được gọi bởi ứng dụng chính khi có cờ báo ngắt kết nối đột ngột
     def force_disconnect(self):
         self._set_connected(False)
 
@@ -149,12 +149,12 @@ class ConnectionBar(tk.Frame):
             if isinstance(w, tk.Label) and w["textvariable"] == str(self._status_var):
                 w.config(fg=color)
                 return
-        # Fallback: find by grid position
+        # Cách dự phòng: tìm kiếm dựa trên vị trí lưới (grid)
         for w in self.grid_slaves(row=0, column=8):
             if isinstance(w, tk.Label):
                 w.config(fg=color)
 
-    #  Public 
+    #  Các hàm Public (Public) 
 
     def set_status(self, text: str, color: str | None = None):
         self._status_var.set(text)

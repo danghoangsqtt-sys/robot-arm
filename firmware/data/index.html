@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RobotArm - HUD Control</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-green: #0f0;
+            --neon-blue: #0ff;
+            --bg-color: #050505;
+            --grid-color: rgba(0, 255, 0, 0.1);
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--neon-green);
+            font-family: 'Share Tech Mono', monospace;
+            margin: 0;
+            padding: 20px;
+            background-image: 
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 30px 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+        }
+        /* Scanline effect */
+        body::after {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+        h1 {
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            text-shadow: 0 0 10px var(--neon-green);
+            border-bottom: 2px solid var(--neon-green);
+            padding-bottom: 10px;
+            width: 100%;
+            text-align: center;
+            margin-top: 40px;
+        }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            width: 100%;
+            max-width: 1000px;
+            justify-content: center;
+            position: relative;
+            z-index: 10;
+        }
+        .panel {
+            background: rgba(0, 20, 0, 0.6);
+            border: 1px solid var(--neon-green);
+            padding: 20px;
+            box-shadow: inset 0 0 15px rgba(0, 255, 0, 0.2), 0 0 10px var(--neon-green);
+            border-radius: 5px;
+            flex: 1;
+            min-width: 300px;
+        }
+        .panel h2 {
+            margin-top: 0;
+            font-size: 1.2em;
+            border-bottom: 1px dashed var(--neon-green);
+            padding-bottom: 5px;
+        }
+        .slider-group {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+        }
+        .slider-group label {
+            width: 60px;
+            font-weight: bold;
+        }
+        input[type=range] {
+            -webkit-appearance: none;
+            flex: 1;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: rgba(0,255,0,0.3);
+            border: 1px solid var(--neon-green);
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 16px;
+            width: 8px;
+            border-radius: 0;
+            background: var(--neon-green);
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -7px;
+            box-shadow: 0 0 10px var(--neon-green);
+        }
+        .value {
+            width: 40px;
+            text-align: right;
+            margin-left: 10px;
+        }
+        button {
+            background: transparent;
+            color: var(--neon-green);
+            border: 1px solid var(--neon-green);
+            padding: 10px 20px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            box-shadow: 0 0 5px var(--neon-green);
+        }
+        button:hover, button:active {
+            background: var(--neon-green);
+            color: var(--bg-color);
+            box-shadow: 0 0 15px var(--neon-green);
+        }
+        button.danger {
+            border-color: red;
+            color: red;
+            box-shadow: 0 0 5px red;
+        }
+        button.danger:hover {
+            background: red;
+            color: white;
+            box-shadow: 0 0 15px red;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            justify-content: center;
+        }
+        #log {
+            height: 150px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.8);
+            border: 1px solid var(--neon-green);
+            padding: 10px;
+            font-size: 0.9em;
+            color: var(--neon-blue);
+        }
+        .status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            border: 1px solid var(--neon-green);
+            padding: 5px 10px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 5px var(--neon-green); }
+            50% { box-shadow: 0 0 20px var(--neon-green); }
+            100% { box-shadow: 0 0 5px var(--neon-green); }
+        }
+    </style>
+</head>
+<body>
+    <div class="status" id="ws-status">SYS: OFFLINE</div>
+    <h1>[HUD] MECH-ARM CONTROL INTERFACE</h1>
+    
+    <div class="container">
+        <div class="panel" style="flex: 2; min-width: 400px; display: flex; flex-direction: column;">
+            <h2>> 3D_VISUALIZATION</h2>
+            <div id="view3d" style="flex: 1; min-height: 300px; border: 1px dashed var(--neon-blue); position: relative;">
+                <!-- 3D Canvas goes here -->
+                <div style="position:absolute; top:5px; left:5px; font-size:10px; color:var(--neon-blue);">[ CLICK TO SELECT SERVO ]</div>
+            </div>
+        </div>
+
+        <div class="panel" style="flex: 1;">
+            <h2>> KINEMATICS_CONTROL</h2>
+            <div id="sliders">
+                <!-- Sliders generated by JS -->
+            </div>
+            <div class="controls">
+                <button onclick="homeAll()">HOME ALL</button>
+                <button class="danger" onclick="stopAll()">EMERGENCY STOP</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>> TERMINAL_UPLINK</h2>
+            <div id="log"></div>
+            <div class="controls" style="margin-top: 10px;">
+                <input type="text" id="cmdInput" style="flex:1; background:transparent; color:var(--neon-green); border:1px solid var(--neon-green); padding:5px; font-family:inherit; outline:none;" placeholder="Enter command (e.g. M 0 90)">
+                <button onclick="sendManualCmd()">SEND</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ws = new WebSocket(`ws://${window.location.host}/ws`);
+        const logEl = document.getElementById('log');
+        const statusEl = document.getElementById('ws-status');
+        
+        function logMsg(msg, isOut) {
+            const div = document.createElement('div');
+            div.textContent = (isOut ? '>> ' : '<< ') + msg;
+            div.style.color = isOut ? 'var(--neon-green)' : 'var(--neon-blue)';
+            logEl.appendChild(div);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        ws.onopen = () => {
+            statusEl.textContent = 'SYS: ONLINE';
+            statusEl.style.color = 'var(--neon-green)';
+            logMsg('Uplink established.', false);
+            ws.send('I'); // Request info
+        };
+        
+        ws.onclose = () => {
+            statusEl.textContent = 'SYS: OFFLINE';
+            statusEl.style.color = 'red';
+            statusEl.style.borderColor = 'red';
+            logMsg('Uplink lost.', false);
+        };
+        
+        ws.onmessage = (e) => {
+            logMsg(e.data, false);
+            // Parse CFG to set slider ranges
+            if(e.data.startsWith('CFG:')) {
+                const parts = e.data.split(':');
+                if(parts.length >= 3) {
+                    const id = parts[1];
+                    const cfg = parts[2].split(',');
+                    const min = cfg[0], max = cfg[1], home = cfg[2];
+                    setupSlider(id, min, max, home);
+                }
+            } else if (e.data.startsWith('STA:')) {
+                const angles = e.data.substring(4).split(',');
+                angles.forEach((ang, i) => {
+                    const s = document.getElementById(`slider-${i}`);
+                    const v = document.getElementById(`val-${i}`);
+                    if(s && v) { s.value = ang; v.textContent = ang; }
+                });
+            } else if (e.data.startsWith('VAL:')) {
+                const parts = e.data.split(':');
+                if(parts.length >= 3) {
+                    const id = parts[1];
+                    const s = document.getElementById(`slider-${id}`);
+                    const v = document.getElementById(`val-${id}`);
+                    if(s && v) { s.value = parts[2]; v.textContent = parts[2]; }
+                }
+            }
+        };
+
+        function sendCmd(cmd) {
+            if(ws.readyState === WebSocket.OPEN) {
+                ws.send(cmd);
+                logMsg(cmd, true);
+            }
+        }
+
+        const jointNames = ["1-ĐẾ", "2-VAI", "3-KHUỶU", "4-GẬP", "5-XOAY", "6-KẸP"];
+        function setupSlider(id, min, max, val) {
+            const container = document.getElementById('sliders');
+            if(document.getElementById(`slider-${id}`)) return; // already exists
+            const group = document.createElement('div');
+            group.className = 'slider-group';
+            group.innerHTML = `
+                <label>${jointNames[id] || ('J'+id)}</label>
+                <input type="range" id="slider-${id}" min="${min}" max="${max}" value="${val}" 
+                    oninput="document.getElementById('val-${id}').textContent = this.value; sendCmd('M ${id} ' + this.value)">
+                <span class="value" id="val-${id}">${val}</span>
+            `;
+            container.appendChild(group);
+        }
+
+        // Initialize default 6 sliders just in case
+        for(let i=0; i<6; i++) { setupSlider(i, 0, 180, 90); }
+
+        function homeAll() { sendCmd('H'); }
+        function stopAll() { sendCmd('X'); }
+        
+        document.getElementById('cmdInput').addEventListener('keypress', function(e) {
+            if(e.key === 'Enter') sendManualCmd();
+        });
+        function sendManualCmd() {
+            const i = document.getElementById('cmdInput');
+            if(i.value) { sendCmd(i.value); i.value = ''; }
+        }
+
+        // === 3D VIEW ===
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        
+        const view3d = document.getElementById('view3d');
+        renderer.setSize(view3d.clientWidth, view3d.clientHeight);
+        view3d.appendChild(renderer.domElement);
+
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 10, 7);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x404040));
+
+        const baseMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
+        const jointMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
+        const activeMat = new THREE.MeshPhongMaterial({ color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 0.5 });
+
+        const parts = [];
+        let activeJointId = -1;
+
+        // Xây dựng chuỗi động học mô phỏng phần cứng thực tế (Kim loại đen)
+        // 0. Base (Đế)
+        const base = new THREE.Group();
+        scene.add(base);
+        const basePlate = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.2, 2.5), baseMat);
+        basePlate.position.y = 0.1;
+        base.add(basePlate);
+        const baseServo = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.5, 0.8), baseMat);
+        baseServo.position.y = 0.85;
+        baseServo.userData = { id: 0 };
+        base.add(baseServo);
+        parts.push(baseServo);
+
+        // 1. Shoulder (Vai)
+        const shoulder = new THREE.Group();
+        shoulder.position.y = 1.6;
+        base.add(shoulder);
+        const shoulderBracket = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.8, 1.2), jointMat);
+        shoulderBracket.position.y = 0.9;
+        shoulderBracket.userData = { id: 1 };
+        shoulder.add(shoulderBracket);
+        parts.push(shoulderBracket);
+
+        // 2. Elbow (Khuỷu)
+        const elbow = new THREE.Group();
+        elbow.position.y = 1.8;
+        shoulder.add(elbow);
+        const elbowBracket = new THREE.Mesh(new THREE.BoxGeometry(0.6, 2.2, 0.8), jointMat);
+        elbowBracket.position.y = 1.1;
+        elbowBracket.userData = { id: 2 };
+        elbow.add(elbowBracket);
+        parts.push(elbowBracket);
+
+        // 3. Wrist Pitch (Gập cổ)
+        const wristPitch = new THREE.Group();
+        wristPitch.position.y = 2.2;
+        elbow.add(wristPitch);
+        const wristBracket = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.9), jointMat);
+        wristBracket.position.y = 0.4;
+        wristBracket.userData = { id: 3 };
+        wristPitch.add(wristBracket);
+        parts.push(wristBracket);
+
+        // 4. Wrist Roll (Xoay cổ)
+        const wristRoll = new THREE.Group();
+        wristRoll.position.y = 0.8;
+        wristPitch.add(wristRoll);
+        const rollServo = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 1.0), jointMat);
+        rollServo.position.y = 0.25;
+        rollServo.userData = { id: 4 };
+        wristRoll.add(rollServo);
+        parts.push(rollServo);
+
+        // 5. Gripper (Kẹp)
+        const gripper = new THREE.Group();
+        gripper.position.y = 0.5;
+        wristRoll.add(gripper);
+        
+        const gripBase = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 0.6), jointMat);
+        gripBase.position.y = 0.2;
+        gripBase.userData = { id: 5 };
+        gripper.add(gripBase);
+        parts.push(gripBase);
+        
+        // Claws
+        const clawMat = new THREE.MeshPhongMaterial({ color: 0x111111 });
+        const leftClaw = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.8, 0.4), clawMat);
+        leftClaw.position.set(-0.4, 0.8, 0);
+        gripper.add(leftClaw);
+        const rightClaw = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.8, 0.4), clawMat);
+        rightClaw.position.set(0.4, 0.8, 0);
+        gripper.add(rightClaw);
+
+        camera.position.set(6, 6, 8);
+        camera.lookAt(0, 3, 0);
+
+        function update3D() {
+            const getVal = (id) => {
+                const el = document.getElementById(`slider-${id}`);
+                return el ? parseInt(el.value) : 90;
+            };
+            
+            base.rotation.y = THREE.MathUtils.degToRad(getVal(0) - 90);
+            shoulder.rotation.x = THREE.MathUtils.degToRad(getVal(1) - 90);
+            elbow.rotation.x = THREE.MathUtils.degToRad(getVal(2) - 90);
+            wristPitch.rotation.x = THREE.MathUtils.degToRad(getVal(3) - 90);
+            wristRoll.rotation.y = THREE.MathUtils.degToRad(getVal(4) - 90);
+            
+            // Animation kẹp đơn giản
+            const gripVal = getVal(5); // 0-90
+            leftClaw.position.x = -0.15 - (gripVal / 90) * 0.3;
+            rightClaw.position.x = 0.15 + (gripVal / 90) * 0.3;
+            
+            renderer.render(scene, camera);
+        }
+
+        // Tương tác Click trên 3D
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        view3d.addEventListener('click', (e) => {
+            const rect = view3d.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(parts);
+            if(intersects.length > 0) {
+                setActiveJoint(intersects[0].object.userData.id);
+            }
+        });
+
+        function setActiveJoint(id) {
+            activeJointId = id;
+            parts.forEach(p => p.material = (p.userData.id === id) ? activeMat : jointMat);
+            
+            // Highlight slider
+            document.querySelectorAll('.slider-group').forEach((el, i) => {
+                el.style.border = (i === id) ? "1px solid var(--neon-green)" : "none";
+                el.style.padding = (i === id) ? "5px" : "0px";
+            });
+            update3D();
+        }
+
+        setInterval(update3D, 50);
+
+        // Resize 3D
+        window.addEventListener('resize', () => {
+            const width = view3d.clientWidth;
+            const height = view3d.clientHeight;
+            renderer.setSize(width, height);
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+        });
+            if(ws.readyState === WebSocket.OPEN) ws.send('T');
+        }, 2000);
+    </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 // =============================================================
-//  cmd_parser.cpp  –  Serial command parser implementation
+//  cmd_parser.cpp  –  Triển khai bộ phân tích lệnh Serial
 // =============================================================
 #include "cmd_parser.h"
 #include <Arduino.h>
@@ -10,10 +10,10 @@
 CmdParser::CmdParser(ServoCtrl& sc)
     : _sc(sc), _len(0), _waitDone(false) {}
 
-// ── Public API ───────────────────────────────────────────────
+// ── Các hàm Public (Public API) ───────────────────────────────────────────────
 
 void CmdParser::feed(char c) {
-    if (c == '\r') return;                    // ignore CR (handles \r\n)
+    if (c == '\r') return;                    // bỏ qua CR (hỗ trợ \r\n)
     if (c == '\n') {
         _buf[_len] = '\0';
         if (_len > 0) process();
@@ -23,7 +23,7 @@ void CmdParser::feed(char c) {
     if (_len < CFG_RX_BUF - 1) {
         _buf[_len++] = c;
     }
-    // silently drop overflow bytes; buffer resets on next newline
+    // âm thầm loại bỏ các byte tràn bộ đệm; bộ đệm sẽ reset vào lần xuống dòng tiếp theo
 }
 
 void CmdParser::tick() {
@@ -33,15 +33,15 @@ void CmdParser::tick() {
     }
 }
 
-// ── Command dispatch ─────────────────────────────────────────
+// ── Phân phối lệnh ─────────────────────────────────────────
 
 void CmdParser::process() {
-    // Upper-case first char = command letter
-    // Remaining text after the separating space = args string
+    // Ký tự đầu tiên viết hoa = chữ cái lệnh
+    // Phần văn bản còn lại sau dấu cách phân tách = chuỗi tham số
     char cmd = _buf[0];
-    if (cmd >= 'a' && cmd <= 'z') cmd -= 32;   // to upper, no ctype dep
+    if (cmd >= 'a' && cmd <= 'z') cmd -= 32;   // chuyển thành chữ hoa, không phụ thuộc ctype
 
-    // args pointer: skip command char and optional space
+    // con trỏ tham số: bỏ qua ký tự lệnh và một dấu cách (nếu có)
     const char* args = (_len > 1) ? _buf + 2 : _buf + 1;
     if (_len <= 1) args = "";
 
@@ -59,7 +59,7 @@ void CmdParser::process() {
     }
 }
 
-// ── Command handlers ─────────────────────────────────────────
+// ── Các hàm xử lý lệnh ─────────────────────────────────────────
 
 // M <id> <angle>
 void CmdParser::cmdMove(const char* args) {
@@ -73,10 +73,10 @@ void CmdParser::cmdMove(const char* args) {
 void CmdParser::cmdAll(const char* args) {
     char* p = (char*)args;
     for (uint8_t i = 0; i < CFG_NUM_SERVOS; i++) {
-        while (*p == ' ') p++;            // skip whitespace
+        while (*p == ' ') p++;            // bỏ qua khoảng trắng
         if (*p == '\0') { respondErr("ARGS"); return; }
         uint8_t angle = (uint8_t)strtol(p, &p, 10);
-        _sc.moveTo(i, angle);             // clamping handled inside moveTo
+        _sc.moveTo(i, angle);             // việc giới hạn góc đã được xử lý trong moveTo
     }
     respondOK();
 }
@@ -89,7 +89,7 @@ void CmdParser::cmdSpeed(const char* args) {
     _sc.setSpeed(id, speed) ? respondOK() : respondErr("ID");
 }
 
-// H [id]   — no arg = home all, arg = home one
+// H [id]   — không có tham số = home tất cả, có tham số = home một servo
 void CmdParser::cmdHome(const char* args) {
     if (*args == '\0') {
         _sc.home();
@@ -100,10 +100,10 @@ void CmdParser::cmdHome(const char* args) {
     respondOK();
 }
 
-// X — stop all motion immediately
+// X — dừng mọi chuyển động ngay lập tức
 void CmdParser::cmdStop() {
     _sc.stopAll();
-    _waitDone = false;   // cancel any pending W
+    _waitDone = false;   // hủy mọi lệnh W đang chờ
     respondOK();
 }
 
@@ -116,7 +116,7 @@ void CmdParser::cmdGet(const char* args) {
     respond(out);
 }
 
-// T — status of all joints
+// T — trạng thái tất cả các khớp
 void CmdParser::cmdStatus() {
     // STA:<a0>,<a1>,<a2>,<a3>,<a4>,<a5>
     char out[32];
@@ -128,7 +128,7 @@ void CmdParser::cmdStatus() {
     respond(out);
 }
 
-// I — print per-servo config (useful for GUI initialisation)
+// I — in cấu hình từng servo (hữu ích cho việc khởi tạo GUI)
 void CmdParser::cmdInfo() {
     char out[40];
     for (uint8_t i = 0; i < CFG_NUM_SERVOS; i++) {
@@ -141,26 +141,33 @@ void CmdParser::cmdInfo() {
     respondOK();
 }
 
-// W — reply DONE when (or once) all motion has stopped
+// W — phản hồi DONE khi (hoặc một khi) mọi chuyển động đã dừng
 void CmdParser::cmdWait() {
     if (!_sc.anyMoving()) {
-        respond("DONE");   // already idle
+        respond("DONE");   // đã nhàn rỗi
     } else {
-        _waitDone = true;  // will fire in tick()
+        _waitDone = true;  // sẽ được kích hoạt trong tick()
     }
 }
 
-// ── Response helpers ─────────────────────────────────────────
+// ── Các hàm hỗ trợ phản hồi ─────────────────────────────────────────
 
 void CmdParser::respond(const char* msg) {
     Serial.println(msg);
+    if (_hook) _hook(msg);
 }
 
 void CmdParser::respondOK() {
     Serial.println(F("OK"));
+    if (_hook) _hook("OK");
 }
 
 void CmdParser::respondErr(const char* reason) {
     Serial.print(F("ERR:"));
     Serial.println(reason);
+    if (_hook) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "ERR:%s", reason);
+        _hook(buf);
+    }
 }

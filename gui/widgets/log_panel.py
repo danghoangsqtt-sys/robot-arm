@@ -1,14 +1,14 @@
 """
-widgets/log_panel.py – Colour-coded serial log / terminal panel.
+widgets/log_panel.py – Bảng terminal / log Serial có tô màu.
 
-Displays all sent commands and received responses with syntax colouring:
-  • Outgoing (→)  cyan
-  • OK / DONE     green
-  • ERR:*         red
-  • STA: / VAL:   accent purple
-  • System msgs   dim grey
+Hiển thị toàn bộ lệnh được gửi đi và phản hồi nhận về với các màu đánh dấu cú pháp:
+  • Gửi đi (→)        màu xanh lục lơ (cyan)
+  • OK / DONE         màu xanh lá (green)
+  • ERR:*             màu đỏ (red)
+  • STA: / VAL:       màu tím nhấn (accent purple)
+  • Tin nhắn hệ thống màu xám mờ (dim grey)
 
-Includes a manual send entry so you can type raw commands.
+Bao gồm một ô nhập để người dùng có thể gửi các lệnh thủ công (raw commands).
 """
 
 import tkinter as tk
@@ -20,12 +20,12 @@ from config import C, FONT_LOG, FONT_SMALL, FONT_BOLD
 
 class LogPanel(tk.Frame):
     """
-    Scrollable colour terminal showing all serial traffic.
-    Call `log_send(cmd)` for outgoing and `log_recv(line)` for incoming.
-    `send_fn` is called when the user submits a manual command.
+    Terminal màu có thể cuộn hiển thị toàn bộ luồng dữ liệu serial.
+    Gọi `log_send(cmd)` cho lệnh gửi và `log_recv(line)` cho lệnh nhận.
+    Hàm `send_fn` được gọi khi người dùng nhập và gửi lệnh thủ công.
     """
 
-    MAX_LINES = 500   # trim when log exceeds this
+    MAX_LINES = 500   # cắt bớt khi dòng log vượt quá giới hạn này
 
     def __init__(self, master, send_fn, **kwargs):
         super().__init__(master, bg=C["surface"], **kwargs)
@@ -33,10 +33,10 @@ class LogPanel(tk.Frame):
         self._paused   = False
         self._build()
 
-    #  Build 
+    #  Khởi tạo (Build) 
 
     def _build(self):
-        #  Header 
+        #  Phần đầu (Header) 
         hdr = tk.Frame(self, bg=C["surface2"], pady=4)
         hdr.pack(fill="x")
 
@@ -45,7 +45,7 @@ class LogPanel(tk.Frame):
             fg=C["accent"], font=FONT_BOLD, padx=10
         ).pack(side="left")
 
-        # Pause / clear buttons
+        # Các nút Dừng / Xóa
         self._pause_var = tk.BooleanVar(value=False)
         tk.Checkbutton(
             hdr, text="Pause",
@@ -63,7 +63,7 @@ class LogPanel(tk.Frame):
             cursor="hand2", command=self._clear,
         ).pack(side="right", padx=(0, 4))
 
-        #  Text area 
+        #  Vùng hiển thị văn bản (Text area) 
         txt_frame = tk.Frame(self, bg=C["log_bg"])
         txt_frame.pack(fill="both", expand=True, padx=0, pady=0)
 
@@ -83,7 +83,7 @@ class LogPanel(tk.Frame):
         sb.pack(side="right", fill="y")
         self._txt.pack(fill="both", expand=True)
 
-        #  Colour tags 
+        #  Các thẻ màu sắc (Colour tags) 
         self._txt.tag_configure("send",   foreground=C["log_send"])
         self._txt.tag_configure("ok",     foreground=C["log_recv"])
         self._txt.tag_configure("err",    foreground=C["log_err"])
@@ -92,7 +92,7 @@ class LogPanel(tk.Frame):
         self._txt.tag_configure("dim",    foreground=C["dim"])
         self._txt.tag_configure("ts",     foreground=C["border"])
 
-        #  Manual send bar 
+        #  Thanh gửi lệnh thủ công (Manual send bar) 
         send_frame = tk.Frame(self, bg=C["surface2"], pady=6, padx=8)
         send_frame.pack(fill="x")
 
@@ -123,11 +123,11 @@ class LogPanel(tk.Frame):
             cursor="hand2", command=self._on_send, width=6,
         ).pack(side="left")
 
-        #  Command history 
+        #  Lịch sử lệnh (Command history) 
         self._history: list[str] = []
         self._hist_idx = -1
 
-    #  Public logging API 
+    #  Các API Public cho việc ghi log (Public logging API) 
 
     def log_send(self, cmd: str):
         self._append(f"→ {cmd}", "send")
@@ -148,7 +148,7 @@ class LogPanel(tk.Frame):
     def log_system(self, msg: str):
         self._append(f"  {msg}", "warn")
 
-    #  Private helpers 
+    #  Các hàm hỗ trợ nội bộ (Private helpers) 
 
     def _append(self, text: str, tag: str = "dim"):
         if self._pause_var.get():
@@ -156,7 +156,7 @@ class LogPanel(tk.Frame):
         ts = datetime.now().strftime("%H:%M:%S")
         self._txt.configure(state="normal")
 
-        # Trim if too long
+        # Xóa bớt nếu quá dài
         lines = int(self._txt.index("end-1c").split(".")[0])
         if lines > self.MAX_LINES:
             self._txt.delete("1.0", f"{lines - self.MAX_LINES + 1}.0")
@@ -178,7 +178,7 @@ class LogPanel(tk.Frame):
         cmd = self._cmd_var.get().strip()
         if not cmd:
             return
-        # Add to history
+        # Thêm vào lịch sử
         if not self._history or self._history[-1] != cmd:
             self._history.append(cmd)
         self._hist_idx = -1

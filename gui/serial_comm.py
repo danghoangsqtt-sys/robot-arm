@@ -1,9 +1,9 @@
 """
-serial_comm.py – Thread-safe serial communication layer.
+serial_comm.py – Lớp giao tiếp Serial an toàn đa luồng.
 
-A background daemon thread continuously reads lines from the serial port
-and puts them into a thread-safe queue.  The GUI polls that queue via
-Tk's after() mechanism – no cross-thread widget updates.
+Một luồng nền liên tục đọc các dòng dữ liệu từ cổng serial
+và đưa chúng vào một hàng đợi an toàn. GUI sẽ lấy dữ liệu từ
+hàng đợi này thông qua cơ chế after() của Tk – tránh cập nhật widget chéo luồng.
 """
 
 import threading
@@ -14,13 +14,13 @@ import serial.tools.list_ports
 
 class SerialComm:
     """
-    Manages one serial connection.
+    Quản lý một kết nối serial.
 
-    Usage:
+    Sử dụng:
         comm = SerialComm()
         comm.connect("/dev/ttyUSB0", 115200)
-        comm.send("T")                    # send status query
-        line = comm.poll()                # non-blocking read
+        comm.send("T")                    # gửi truy vấn trạng thái
+        line = comm.poll()                # đọc không chặn
         comm.disconnect()
     """
 
@@ -31,15 +31,15 @@ class SerialComm:
         self._rx_queue: queue.Queue[str] = queue.Queue()
         self._lock = threading.Lock()
 
-    #  Connection management 
+    #  Quản lý kết nối (Connection management) 
 
     def connect(self, port: str, baud: int) -> None:
-        """Open port and start reader thread.  Raises serial.SerialException on failure."""
+        """Mở cổng và khởi chạy luồng đọc. Báo lỗi serial.SerialException nếu thất bại."""
         with self._lock:
             self._ser = serial.Serial(
                 port=port,
                 baudrate=baud,
-                timeout=0.05,       # short timeout keeps reader loop responsive
+                timeout=0.05,       # thời gian chờ ngắn giúp vòng lặp đọc phản hồi nhanh
                 write_timeout=1.0,
             )
             self._running = True
@@ -49,7 +49,7 @@ class SerialComm:
             self._thread.start()
 
     def disconnect(self) -> None:
-        """Stop reader thread and close port."""
+        """Dừng luồng đọc và đóng cổng."""
         self._running = False
         if self._thread:
             self._thread.join(timeout=1.5)
@@ -63,12 +63,12 @@ class SerialComm:
     def is_connected(self) -> bool:
         return self._ser is not None and self._ser.is_open
 
-    #  Send 
+    #  Gửi dữ liệu (Send) 
 
     def send(self, cmd: str) -> bool:
         """
-        Write a command string (newline appended automatically).
-        Returns False if not connected or write fails.
+        Ghi một chuỗi lệnh (tự động chèn ký tự xuống dòng ở cuối).
+        Trả về False nếu không có kết nối hoặc ghi thất bại.
         """
         if not self.is_connected:
             return False
@@ -79,27 +79,27 @@ class SerialComm:
         except serial.SerialException:
             return False
 
-    #  Receive 
+    #  Nhận dữ liệu (Receive) 
 
     def poll(self) -> str | None:
-        """Return next available received line, or None."""
+        """Trả về dòng dữ liệu tiếp theo nhận được, hoặc None."""
         try:
             return self._rx_queue.get_nowait()
         except queue.Empty:
             return None
 
     def flush_rx(self) -> None:
-        """Discard any buffered incoming data."""
+        """Loại bỏ bất kỳ dữ liệu đầu vào nào đang được đệm."""
         while not self._rx_queue.empty():
             try:
                 self._rx_queue.get_nowait()
             except queue.Empty:
                 break
 
-    #  Background reader 
+    #  Luồng đọc nền (Background reader) 
 
     def _read_loop(self) -> None:
-        """Daemon thread: reads lines and enqueues them."""
+        """Luồng daemon: đọc các dòng dữ liệu và đưa vào hàng đợi."""
         while self._running:
             try:
                 with self._lock:
@@ -111,14 +111,14 @@ class SerialComm:
                         if line:
                             self._rx_queue.put(line)
             except serial.SerialException:
-                # Port was closed or disconnected
+                # Cổng đã bị đóng hoặc bị ngắt kết nối
                 self._running = False
-                self._rx_queue.put("__DISCONNECTED__")   # sentinel
+                self._rx_queue.put("__DISCONNECTED__")   # cờ báo ngắt kết nối
                 break
 
-    #  Utility 
+    #  Tiện ích (Utility) 
 
     @staticmethod
     def list_ports() -> list[str]:
-        """Return a list of available serial port names."""
+        """Trả về danh sách tên các cổng serial khả dụng."""
         return sorted(p.device for p in serial.tools.list_ports.comports())

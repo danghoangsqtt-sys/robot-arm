@@ -1,12 +1,12 @@
 // =============================================================
-//  servo_ctrl.cpp  –  Servo motion controller implementation
+//  servo_ctrl.cpp  –  Triển khai bộ điều khiển chuyển động Servo
 // =============================================================
 #include <Arduino.h>
 #include "servo_ctrl.h"
 
 ServoCtrl::ServoCtrl(PCA9685& pca) : _pca(pca) {}
 
-// ── Public API ───────────────────────────────────────────────
+// ── Các hàm Public (Public API) ───────────────────────────────────────────────
 
 void ServoCtrl::begin() {
     for (uint8_t i = 0; i < CFG_NUM_SERVOS; i++) {
@@ -15,7 +15,7 @@ void ServoCtrl::begin() {
         _st[i].target  = SERVO_TABLE[i].homeAng;
         _st[i].moving  = false;
         applyAngle(i, _st[i].current);
-        delay(30);   // stagger startup to limit inrush current
+        delay(30);   // giãn cách thời gian khởi động để hạn chế dòng điện tăng đột ngột
     }
 }
 
@@ -60,7 +60,7 @@ bool ServoCtrl::anyMoving() const {
     return false;
 }
 
-// ── Motion update (call on fixed timer) ─────────────────────
+// ── Cập nhật chuyển động (gọi theo bộ đếm thời gian cố định) ─────────────────────
 
 void ServoCtrl::update() {
     for (uint8_t i = 0; i < CFG_NUM_SERVOS; i++) {
@@ -69,7 +69,7 @@ void ServoCtrl::update() {
 
         int16_t diff = (int16_t)s.target - (int16_t)s.current;
 
-        // Check if we can reach target in this step
+        // Kiểm tra xem có thể đạt tới mục tiêu trong bước này không
         if ((diff > 0 ? diff : -diff) <= (int16_t)s.speed) {
             s.current = s.target;
             s.moving  = false;
@@ -81,7 +81,7 @@ void ServoCtrl::update() {
     }
 }
 
-// ── Private helpers ──────────────────────────────────────────
+// ── Các hàm hỗ trợ nội bộ (Private helpers) ──────────────────────────────────────────
 
 void ServoCtrl::applyAngle(uint8_t id, uint8_t angle) {
     _pca.setPulseUs(SERVO_TABLE[id].ch, angleToUs(id, angle));
@@ -89,7 +89,7 @@ void ServoCtrl::applyAngle(uint8_t id, uint8_t angle) {
 
 uint16_t ServoCtrl::angleToUs(uint8_t id, uint8_t angle) const {
     const ServoDef& d = SERVO_TABLE[id];
-    // Linear map:  us = minUs + (angle - minAng) * (maxUs - minUs) / (maxAng - minAng)
+    // Nội suy tuyến tính:  us = minUs + (angle - minAng) * (maxUs - minUs) / (maxAng - minAng)
     uint16_t rangeAng = d.maxAng - d.minAng;
     uint16_t rangeUs  = d.maxUs  - d.minUs;
     return d.minUs + (uint16_t)(((uint32_t)(angle - d.minAng) * rangeUs + rangeAng / 2) / rangeAng);

@@ -7,13 +7,12 @@ from config import (
 )
 from serial_comm import SerialComm
 from widgets.connection_bar import ConnectionBar
-from widgets.joint_panel    import JointsPanel
 from widgets.control_bar    import ControlBar
-from widgets.log_panel      import LogPanel
 from widgets.pose_panel     import PosePanel
+from widgets.gauge_panel    import GaugeGridPanel
 
 
-#  ttk style customisation 
+#  Tùy chỉnh giao diện ttk (ttk style customisation) 
 
 def _apply_theme(root: tk.Tk) -> None:
     style = ttk.Style(root)
@@ -46,14 +45,15 @@ def _apply_theme(root: tk.Tk) -> None:
     )
 
 
-#  Application class 
+#  Lớp ứng dụng chính (Application class) 
 
 class ArmControlApp(tk.Tk):
 
-    POLL_MS = 40   # serial queue poll interval
+    POLL_MS = 40   # khoảng thời gian chờ vòng lặp serial
 
     def __init__(self):
         super().__init__()
+        self._active_joint = -1
 
         self.title(f"{APP_TITLE}  v{APP_VERSION}")
         self.geometry(WINDOW_SIZE)
@@ -65,12 +65,79 @@ class ArmControlApp(tk.Tk):
 
         self._comm = SerialComm()
         self._build_ui()
+        self._init_keyboard()
         self._start_serial_poll()
 
-    #  UI construction 
+    #  Điều khiển bàn phím (Keyboard control) 
+
+    def _init_keyboard(self):
+        self._keys_pressed = set()
+        self.bind("<KeyPress>", self._on_key_press)
+        self.bind("<KeyRelease>", self._on_key_release)
+        self._key_poll()
+
+    def _on_key_press(self, event):
+        # Bỏ qua nếu đang gõ vào text box
+        if isinstance(event.widget, (tk.Entry, tk.Text, tk.Spinbox)): return
+        if event.keysym not in self._keys_pressed:
+            self._keys_pressed.add(event.keysym)
+
+    def _on_key_release(self, event):
+        if event.keysym in self._keys_pressed:
+            self._keys_pressed.remove(event.keysym)
+
+    def _key_poll(self):
+        delta = 2
+        mapping = {
+            'a': (0, delta), 'd': (0, -delta),
+            'w': (1, delta), 's': (1, -delta),
+            'Up': (2, delta), 'Down': (2, -delta),
+            'i': (3, delta), 'k': (3, -delta),
+            'j': (4, delta), 'l': (4, -delta),
+            'q': (5, delta), 'e': (5, -delta),
+            'A': (0, delta), 'D': (0, -delta),
+            'W': (1, delta), 'S': (1, -delta),
+            'I': (3, delta), 'K': (3, -delta),
+            'J': (4, delta), 'L': (4, -delta),
+            'Q': (5, delta), 'E': (5, -delta),
+            
+            # Bàn phím số Numpad
+            'KP_4': (0, delta), 'KP_6': (0, -delta),
+            'KP_Left': (0, delta), 'KP_Right': (0, -delta),
+            
+            'KP_8': (1, delta), 'KP_2': (1, -delta),
+            'KP_Up': (1, delta), 'KP_Down': (1, -delta),
+            
+            'KP_7': (2, delta), 'KP_9': (2, -delta),
+            'KP_Home': (2, delta), 'KP_Prior': (2, -delta),
+            
+            'KP_1': (3, delta), 'KP_3': (3, -delta),
+            'KP_End': (3, delta), 'KP_Next': (3, -delta),
+            
+            'KP_Divide': (4, delta), 'KP_Multiply': (4, -delta),
+            'KP_Subtract': (5, delta), 'KP_Add': (5, -delta),
+            # Điều khiển Servo đang được chọn (Active)
+            'Left': (-1, -delta), 'Right': (-1, delta),
+        }
+        deltas = {}
+        for k in self._keys_pressed:
+            if k in mapping:
+                j_id, d = mapping[k]
+                if j_id == -1: # Move active joint
+                    if self._active_joint != -1:
+                        deltas[self._active_joint] = deltas.get(self._active_joint, 0) + d
+                else:
+                    deltas[j_id] = deltas.get(j_id, 0) + d
+                
+        if deltas:
+            self._joints.nudge_joints(deltas)
+            
+        self.after(40, self._key_poll)
+
+    #  Khởi tạo giao diện người dùng (UI construction) 
 
     def _build_ui(self):
-        #  Connection bar (top) 
+        #  Thanh kết nối (Connection bar - top) 
         self._conn_bar = ConnectionBar(
             self, self._comm,
             on_connect=self._on_connected,
@@ -80,7 +147,7 @@ class ArmControlApp(tk.Tk):
 
         ttk.Separator(self, orient="horizontal").pack(fill="x")
 
-        #  Control bar (bottom) 
+        #  Thanh điều khiển (Control bar - bottom) 
         self._ctrl_bar = ControlBar(
             self,
             send_fn=self._send,
@@ -90,38 +157,40 @@ class ArmControlApp(tk.Tk):
 
         ttk.Separator(self, orient="horizontal").pack(fill="x", side="bottom")
 
-        #  Main body 
-        body = tk.PanedWindow(
+        # Phần giữa: Lưới các Gauge và 3D View
+        mid_pane = tk.PanedWindow(
             self, orient="horizontal",
             bg=C["bg"], sashwidth=6, sashrelief="flat",
-            sashpad=0,
         )
-        body.pack(fill="both", expand=True)
+        mid_pane.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Left: joints panel
-        self._joints = JointsPanel(body, send_fn=self._send)
-        body.add(self._joints, minsize=560, stretch="always")
+        self._joints = GaugeGridPanel(mid_pane, send_fn=self._send)
 
-        # Right: log + pose stacked vertically
-        right_pane = tk.PanedWindow(
-            body, orient="vertical",
-            bg=C["bg"], sashwidth=6, sashrelief="flat",
-        )
-        body.add(right_pane, minsize=300, stretch="always")
-
-        self._log = LogPanel(right_pane, send_fn=self._send)
-        right_pane.add(self._log, minsize=200, stretch="always")
-
-        self._pose = PosePanel(
-            right_pane,
+        from widgets.arm_3d import RobotArm3D
+        self._arm_3d = RobotArm3D(
+            mid_pane, 
             get_angles_fn=lambda: self._joints.get_all_angles(),
-            get_speeds_fn=lambda: [self._joints._rows[i].get_speed()
-                                   for i in range(NUM_JOINTS)],
+            set_active_fn=self._set_active_joint
+        )
+        mid_pane.add(self._arm_3d, minsize=350, stretch="always")
+        mid_pane.add(self._joints, minsize=600, stretch="always")
+
+        # Phần dưới cùng: Pose Panel (Record/Play/Save)
+        self._pose = PosePanel(
+            self,
+            get_angles_fn=lambda: self._joints.get_all_angles(),
+            get_speeds_fn=lambda: [3]*6, # Tốc độ mặc định, Gauge chưa hỗ trợ chỉnh speed riêng
             send_fn=self._send,
         )
-        right_pane.add(self._pose, minsize=280, stretch="never")
+        self._pose.pack(fill="x", side="bottom")
 
-    #  Serial poll loop 
+    def _set_active_joint(self, joint_id):
+        self._active_joint = joint_id
+        self._joints.set_active(joint_id)
+        if hasattr(self, '_arm_3d'):
+            self._arm_3d.set_active(joint_id)
+
+    #  Vòng lặp lấy mẫu dữ liệu Serial (Serial poll loop) 
 
     def _start_serial_poll(self):
         self._poll_serial()
@@ -132,27 +201,27 @@ class ArmControlApp(tk.Tk):
             self._handle_response(line)
         self.after(self.POLL_MS, self._poll_serial)
 
-    #  Response dispatcher 
+    #  Xử lý phản hồi (Response dispatcher) 
 
     def _handle_response(self, line: str):
-        # Unexpected disconnect sentinel from reader thread
+        # Biến cờ ngắt kết nối đột ngột từ luồng đọc
         if line == "__DISCONNECTED__":
-            self._log.log_system("⚠  Port disconnected unexpectedly")
+            # self._log.log_system("⚠  Port disconnected unexpectedly")
             self._conn_bar.force_disconnect()
             self._ctrl_bar.set_status("Disconnected", C["red"])
             return
 
-        self._log.log_recv(line)
+        # self._log.log_recv(line)
 
         if line == "OK":
-            pass   # nothing extra needed
+            pass   # không cần làm gì thêm
 
         elif line == "DONE":
             self._ctrl_bar.set_status("Idle", C["green"])
 
         elif line in ("ARM READY", "ARM INIT"):
             self._ctrl_bar.set_status("Ready", C["green"])
-            # Sync positions from firmware
+            # Đồng bộ vị trí từ firmware
             self.after(300, lambda: self._send("T"))
             self.after(400, lambda: self._send("I"))
 
@@ -184,38 +253,38 @@ class ArmControlApp(tk.Tk):
         elif line.startswith("ERR:"):
             self._ctrl_bar.set_status(f"Error: {line[4:]}", C["red"])
 
-    #  Send helper 
+    #  Hàm hỗ trợ gửi lệnh (Send helper) 
 
     def _send(self, cmd: str):
         if not self._comm.is_connected:
-            self._log.log_system("⚠  Not connected – command ignored")
+            # self._log.log_system("⚠  Not connected – command ignored")
             return
-        self._log.log_send(cmd)
+        # self._log.log_send(cmd)
         self._comm.send(cmd)
 
-        # Optimistically mark as moving for M and A commands
+        # Đánh dấu trạng thái là đang di chuyển cho các lệnh M, A, H
         if cmd.startswith(("M ", "A ", "H")):
             self._ctrl_bar.set_status("Moving…", C["orange"])
 
-    #  Connection callbacks 
+    #  Các hàm callback kết nối (Connection callbacks) 
 
     def _on_connected(self, port: str, baud: int):
-        self._log.log_system(f"Connected → {port}  @  {baud} baud")
+        # self._log.log_system(f"Connected → {port}  @  {baud} baud")
         self._ctrl_bar.set_status("Connected", C["green"])
         self._comm.flush_rx()
 
     def _on_disconnected(self):
-        self._log.log_system("Disconnected")
+        # self._log.log_system("Disconnected")
         self._ctrl_bar.set_status("Disconnected", C["dim"])
 
-    #  Clean shutdown 
+    #  Tắt ứng dụng an toàn (Clean shutdown) 
 
     def _on_close(self):
         self._comm.disconnect()
         self.destroy()
 
 
-#  Entry point 
+#  Điểm bắt đầu chạy ứng dụng (Entry point) 
 
 if __name__ == "__main__":
     app = ArmControlApp()

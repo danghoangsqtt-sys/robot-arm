@@ -1,15 +1,15 @@
 """
-widgets/pose_panel.py – Named pose save / load / sequence manager.
+widgets/pose_panel.py – Trình quản lý tư thế lưu / tải / và chạy theo chuỗi.
 
-Poses are persisted to poses.json in the working directory.
-Each pose stores all joint angles and speeds.
+Các tư thế (pose) được lưu trữ vào file poses.json tại thư mục làm việc.
+Mỗi tư thế lưu trữ toàn bộ các góc khớp và tốc độ.
 
-Features:
-  • Save current slider positions as a named pose
-  • Load a pose (moves arm to stored angles)
-  • Delete a pose
-  • Sequence player: play through selected poses with a delay
-  • Import / Export JSON
+Tính năng:
+  • Lưu các vị trí thanh trượt hiện tại thành một tư thế có tên
+  • Tải một tư thế (di chuyển cánh tay robot tới các góc đã lưu)
+  • Xóa một tư thế
+  • Bộ phát chuỗi: chạy lần lượt các tư thế đã chọn với một khoảng thời gian chờ
+  • Xuất / Nhập file JSON
 """
 
 import json
@@ -22,11 +22,11 @@ from config import C, POSES_FILE, NUM_JOINTS, FONT_LABEL, FONT_BOLD, FONT_SMALL,
 
 class PosePanel(tk.Frame):
     """
-    Right-side panel for pose management.
+    Bảng khung điều khiển lưu tư thế bên phải.
 
-    `get_angles_fn`  – callable returning list[int] of current slider angles
-    `get_speeds_fn`  – callable returning list[int] of current speeds
-    `send_fn`        – callable(str) to send a serial command
+    `get_angles_fn`  – hàm có thể gọi, trả về danh sách các góc thanh trượt (list[int])
+    `get_speeds_fn`  – hàm có thể gọi, trả về danh sách các tốc độ hiện hành (list[int])
+    `send_fn`        – hàm callable(str) dùng để gửi lệnh serial
     """
 
     SEQUENCE_MIN_DELAY_MS = 200
@@ -45,118 +45,65 @@ class PosePanel(tk.Frame):
         self._build()
         self._load_from_disk()
 
-    #  Build 
+    #  Khởi tạo (Build) 
 
     def _build(self):
-        #  Header 
-        hdr = tk.Frame(self, bg=C["surface2"], pady=4)
-        hdr.pack(fill="x")
-        tk.Label(
-            hdr, text="POSE MANAGER", bg=C["surface2"],
-            fg=C["accent"], font=FONT_BOLD, padx=10
-        ).pack(side="left")
+        # Thiết kế dạng thanh ngang
+        ctrl_frame = tk.Frame(self, bg=C["surface"], pady=6, padx=10)
+        ctrl_frame.pack(fill="x", side="left")
 
-        #  Pose list 
-        list_frame = tk.Frame(self, bg=C["surface"])
-        list_frame.pack(fill="both", expand=True, padx=6, pady=6)
-
-        sb = ttk.Scrollbar(list_frame)
-        sb.pack(side="right", fill="y")
-
-        self._listbox = tk.Listbox(
-            list_frame, yscrollcommand=sb.set,
-            bg=C["entry_bg"], fg=C["text"], font=FONT_MONO,
-            selectbackground=C["accent"], selectforeground=C["bg"],
-            relief="flat", highlightthickness=1,
-            highlightcolor=C["accent"], highlightbackground=C["border"],
-            activestyle="none",
-        )
-        self._listbox.pack(fill="both", expand=True)
-        sb.config(command=self._listbox.yview)
-        self._listbox.bind("<Double-Button-1>", lambda _e: self._do_load())
-
-        #  Pose angle preview 
-        self._preview_var = tk.StringVar(value="Select a pose to preview")
-        tk.Label(
-            self, textvariable=self._preview_var,
-            bg=C["surface"], fg=C["dim"], font=FONT_SMALL,
-            wraplength=200, justify="left", padx=6,
-        ).pack(fill="x", pady=(0, 4))
-        self._listbox.bind("<<ListboxSelect>>", self._on_select)
-
-        ttk.Separator(self, orient="horizontal").pack(fill="x", padx=6)
-
-        #  Pose action buttons 
-        btn_frame = tk.Frame(self, bg=C["surface"], pady=6)
-        btn_frame.pack(fill="x", padx=6)
-
-        for col, (label, cmd, bg, fg) in enumerate([
-            ("💾 Save",   self._do_save,   C["accent"],  C["bg"]),
-            ("▶ Load",   self._do_load,   C["green"],   C["bg"]),
-            ("✕ Delete", self._do_delete, C["red"],     C["bg"]),
-        ]):
-            tk.Button(
-                btn_frame, text=label, command=cmd,
-                font=FONT_SMALL, width=8,
-                bg=bg, fg=fg, relief="flat",
-                activebackground=C["border"], activeforeground=fg,
-                cursor="hand2",
-            ).grid(row=0, column=col, padx=3)
-
-        ttk.Separator(self, orient="horizontal").pack(fill="x", padx=6, pady=(4, 0))
-
-        #  Sequence player 
-        seq_hdr = tk.Frame(self, bg=C["surface2"], pady=3)
-        seq_hdr.pack(fill="x", pady=(4, 2))
-        tk.Label(
-            seq_hdr, text="SEQUENCE", bg=C["surface2"],
-            fg=C["dim"], font=FONT_SMALL, padx=10
-        ).pack(side="left")
-
-        seq_ctrl = tk.Frame(self, bg=C["surface"], pady=4)
-        seq_ctrl.pack(fill="x", padx=6)
-
-        tk.Label(seq_ctrl, text="Delay(ms):", bg=C["surface"],
-                 fg=C["dim"], font=FONT_SMALL).grid(row=0, column=0, padx=(0, 4))
-
-        self._delay_var = tk.IntVar(value=1500)
-        tk.Spinbox(
-            seq_ctrl, from_=200, to=10000, increment=100,
-            textvariable=self._delay_var, width=6,
-            bg=C["entry_bg"], fg=C["text"],
-            buttonbackground=C["surface2"], relief="flat",
-            font=FONT_MONO,
-        ).grid(row=0, column=1, padx=(0, 8))
-
+        # Record / Play
         self._seq_btn = tk.Button(
-            seq_ctrl, text="▶ Run Seq", font=FONT_SMALL, width=10,
-            bg=C["orange"], fg=C["bg"], relief="flat",
-            activebackground=C["border"], activeforeground=C["bg"],
+            ctrl_frame, text="● Record", font=FONT_BOLD, width=10,
+            bg=C["surface2"], fg=C["text"], relief="flat",
+            activebackground=C["border"], activeforeground=C["text"],
+            cursor="hand2", command=self._do_save,
+        )
+        self._seq_btn.pack(side="left", padx=4)
+
+        self._play_btn = tk.Button(
+            ctrl_frame, text="▶ Play", font=FONT_BOLD, width=10,
+            bg=C["surface2"], fg=C["text"], relief="flat",
+            activebackground=C["border"], activeforeground=C["text"],
             cursor="hand2", command=self._toggle_sequence,
         )
-        self._seq_btn.grid(row=0, column=2)
+        self._play_btn.pack(side="left", padx=4)
 
-        ttk.Separator(self, orient="horizontal").pack(fill="x", padx=6, pady=(4, 0))
+        tk.Label(ctrl_frame, text="  |  ", bg=C["surface"], fg=C["border"]).pack(side="left")
 
-        #  Import / Export 
-        io_frame = tk.Frame(self, bg=C["surface"], pady=4)
-        io_frame.pack(fill="x", padx=6)
+        # Nút Import / Export
+        tk.Button(
+            ctrl_frame, text="💾 Save", font=FONT_SMALL, width=8,
+            bg=C["surface2"], fg=C["text"], relief="flat",
+            command=self._do_export, cursor="hand2"
+        ).pack(side="left", padx=4)
 
         tk.Button(
-            io_frame, text="Export…", font=FONT_SMALL,
+            ctrl_frame, text="📂 Load", font=FONT_SMALL, width=8,
             bg=C["surface2"], fg=C["text"], relief="flat",
-            activebackground=C["border"], activeforeground=C["text"],
-            cursor="hand2", command=self._do_export, width=8,
-        ).pack(side="left", padx=(0, 6))
+            command=self._do_import, cursor="hand2"
+        ).pack(side="left", padx=4)
+
+        # Trình chọn tư thế (Combobox)
+        self._pose_var = tk.StringVar()
+        self._cb = ttk.Combobox(
+            ctrl_frame, textvariable=self._pose_var, state="readonly", width=15, font=FONT_SMALL
+        )
+        self._cb.pack(side="left", padx=(10, 4))
+        self._cb.bind("<<ComboboxSelected>>", lambda e: self._do_load())
 
         tk.Button(
-            io_frame, text="Import…", font=FONT_SMALL,
-            bg=C["surface2"], fg=C["text"], relief="flat",
-            activebackground=C["border"], activeforeground=C["text"],
-            cursor="hand2", command=self._do_import, width=8,
+            ctrl_frame, text="✕", font=FONT_SMALL, bg=C["red"], fg=C["bg"], relief="flat",
+            command=self._do_delete, cursor="hand2"
         ).pack(side="left")
 
-    #  Pose actions 
+        # Status text
+        self._status_var = tk.StringVar(value="Ready")
+        tk.Label(
+            self, textvariable=self._status_var, bg=C["surface"], fg=C["dim"], font=FONT_SMALL
+        ).pack(side="right", padx=10)
+
+    #  Các chức năng của tư thế (Pose actions) 
 
     def _do_save(self):
         name = simpledialog.askstring(
@@ -176,41 +123,30 @@ class PosePanel(tk.Frame):
         self._save_to_disk()
 
     def _do_load(self):
-        sel = self._listbox.curselection()
-        if not sel:
-            return
-        name = self._listbox.get(sel[0])
+        name = self._pose_var.get()
+        if not name: return
         pose = self._poses.get(name)
-        if not pose:
-            return
-        # Send speeds first, then angles
+        if not pose: return
         for i, spd in enumerate(pose.get("speeds", [])):
             self._send(f"S {i} {spd}")
         angles = pose["angles"]
         self._send("A " + " ".join(str(a) for a in angles))
+        self._status_var.set(f"Loaded: {name}")
 
     def _do_delete(self):
-        sel = self._listbox.curselection()
-        if not sel:
-            return
-        name = self._listbox.get(sel[0])
+        name = self._pose_var.get()
+        if not name: return
         if messagebox.askyesno("Delete", f"Delete pose '{name}'?", parent=self):
             del self._poses[name]
+            self._pose_var.set("")
             self._refresh_list()
             self._save_to_disk()
+            self._status_var.set(f"Deleted: {name}")
 
     def _on_select(self, _event):
-        sel = self._listbox.curselection()
-        if not sel:
-            return
-        name  = self._listbox.get(sel[0])
-        pose  = self._poses.get(name)
-        if pose:
-            ang  = pose.get("angles", [])
-            text = f"{name}\n" + "  ".join(f"J{i}:{a}°" for i, a in enumerate(ang))
-            self._preview_var.set(text)
+        pass
 
-    #  Sequence player 
+    #  Trình phát chuỗi (Sequence player) 
 
     def _toggle_sequence(self):
         if self._seq_running:
@@ -219,40 +155,40 @@ class PosePanel(tk.Frame):
             self._start_sequence()
 
     def _start_sequence(self):
-        items = list(self._listbox.get(0, "end"))
+        items = list(self._poses.keys())
         if len(items) < 2:
             messagebox.showinfo("Sequence", "Add at least 2 poses to run a sequence.", parent=self)
             return
         self._seq_items   = items
         self._seq_idx     = 0
         self._seq_running = True
-        self._seq_btn.config(text="■ Stop Seq", bg=C["red"])
+        self._play_btn.config(text="■ Stop", bg=C["red"], fg="white")
+        self._status_var.set("Playing sequence...")
         self._play_next()
 
     def _play_next(self):
-        if not self._seq_running or not self._seq_items:
-            return
+        if not self._seq_running or not self._seq_items: return
         idx  = self._seq_idx % len(self._seq_items)
         name = self._seq_items[idx]
         pose = self._poses.get(name)
         if pose:
-            self._listbox.selection_clear(0, "end")
-            self._listbox.selection_set(idx)
-            self._listbox.see(idx)
+            self._pose_var.set(name)
             angles = pose["angles"]
             self._send("A " + " ".join(str(a) for a in angles))
+            self._status_var.set(f"Playing: {name} ({idx+1}/{len(self._seq_items)})")
         self._seq_idx += 1
-        delay = max(self.SEQUENCE_MIN_DELAY_MS, self._delay_var.get())
-        self._seq_after = self.after(delay, self._play_next)
+        # Delay cứng 1500ms cho đơn giản, hoặc lấy từ config
+        self._seq_after = self.after(1500, self._play_next)
 
     def _stop_sequence(self):
         self._seq_running = False
         if self._seq_after:
             self.after_cancel(self._seq_after)
             self._seq_after = None
-        self._seq_btn.config(text="▶ Run Seq", bg=C["orange"])
+        self._play_btn.config(text="▶ Play", bg=C["surface2"], fg=C["text"])
+        self._status_var.set("Stopped")
 
-    #  Import / Export 
+    #  Nhập / Xuất (Import / Export) 
 
     def _do_export(self):
         path = filedialog.asksaveasfilename(
@@ -281,7 +217,7 @@ class PosePanel(tk.Frame):
         except (json.JSONDecodeError, OSError) as e:
             messagebox.showerror("Import Error", str(e), parent=self)
 
-    #  Persistence 
+    #  Lưu trữ cố định (Persistence) 
 
     def _save_to_disk(self):
         try:
@@ -300,6 +236,7 @@ class PosePanel(tk.Frame):
                 self._poses = {}
 
     def _refresh_list(self):
-        self._listbox.delete(0, "end")
-        for name in self._poses:
-            self._listbox.insert("end", name)
+        items = list(self._poses.keys())
+        self._cb.config(values=items)
+        if items and not self._pose_var.get():
+            self._pose_var.set(items[0])

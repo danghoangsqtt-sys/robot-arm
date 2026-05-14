@@ -1,25 +1,25 @@
 // =============================================================
-//  pca9685.cpp  –  PCA9685 driver implementation
+//  pca9685.cpp  –  Triển khai các hàm của driver PCA9685
 // =============================================================
 #include "pca9685.h"
 #include <Wire.h>
 
-// ── Register map ─────────────────────────────────────────────
+// ── Bản đồ thanh ghi (Register map) ─────────────────────────────────────────────
 #define REG_MODE1       0x00
 #define REG_MODE2       0x01
-#define REG_LED0_ON_L   0x06   // first channel register (4 bytes/ch)
-#define REG_ALL_ON_L    0xFA   // broadcast to all channels
+#define REG_LED0_ON_L   0x06   // thanh ghi của kênh đầu tiên (4 byte/kênh)
+#define REG_ALL_ON_L    0xFA   // gửi broadcast tới tất cả các kênh
 #define REG_PRESCALE    0xFE
 
-// MODE1 bit masks
+// Các mask bit của MODE1
 #define M1_RESTART      0x80
-#define M1_AI           0x20   // auto-increment register pointer
+#define M1_AI           0x20   // tự động tăng con trỏ thanh ghi
 #define M1_SLEEP        0x10
 
-// ── Constants ────────────────────────────────────────────────
-#define PCA_OSC_HZ      25000000UL  // internal oscillator (25 MHz)
-#define PWM_STEPS       4096UL      // 12-bit resolution
-#define PERIOD_US       20000UL     // 50 Hz → 20 ms period
+// ── Hằng số (Constants) ────────────────────────────────────────────────
+#define PCA_OSC_HZ      25000000UL  // bộ dao động nội (25 MHz)
+#define PWM_STEPS       4096UL      // độ phân giải 12-bit
+#define PERIOD_US       20000UL     // 50 Hz → chu kỳ 20 ms
 
 // ─────────────────────────────────────────────────────────────
 
@@ -28,11 +28,11 @@ PCA9685::PCA9685(uint8_t addr) : _addr(addr) {}
 bool PCA9685::begin(uint8_t sda, uint8_t scl, uint32_t i2cFreqHz) {
     Wire.begin(sda, scl, i2cFreqHz);
 
-    // Reset to known state: sleep + auto-increment
+    // Reset về trạng thái xác định: ngủ + tự động tăng thanh ghi
     writeReg(REG_MODE1, M1_SLEEP | M1_AI);
-    writeReg(REG_MODE2, 0x04);   // output change on STOP, totem-pole
+    writeReg(REG_MODE2, 0x04);   // thay đổi trạng thái đầu ra khi STOP, kiểu totem-pole
 
-    return (readReg(REG_MODE1) & M1_SLEEP);   // true if chip responded
+    return (readReg(REG_MODE1) & M1_SLEEP);   // trả về true nếu chip phản hồi
 }
 
 void PCA9685::setPWMFreq(uint16_t freqHz) {
@@ -42,19 +42,19 @@ void PCA9685::setPWMFreq(uint16_t freqHz) {
 
     uint8_t mode = readReg(REG_MODE1);
 
-    // 1. Put chip to sleep (required before changing prescaler)
+    // 1. Đưa chip vào trạng thái ngủ (bắt buộc trước khi đổi bộ chia tần số)
     writeReg(REG_MODE1, (mode & ~M1_RESTART) | M1_SLEEP);
 
-    // 2. Set prescaler (only writable while SLEEP = 1)
+    // 2. Thiết lập bộ chia tần số (chỉ có thể ghi khi SLEEP = 1)
     writeReg(REG_PRESCALE, pre);
 
-    // 3. Clear SLEEP to start the oscillator
+    // 3. Xóa bit SLEEP để khởi động lại bộ dao động
     writeReg(REG_MODE1, mode & ~M1_SLEEP);
 
-    // 4. Datasheet: wait ≥ 500 µs for oscillator to stabilise before RESTART
+    // 4. Theo datasheet: chờ ≥ 500 µs để bộ dao động ổn định trước khi RESTART
     delayMicroseconds(500);
 
-    // 5. Set RESTART (SLEEP must be 0 first – this was the bug)
+    // 5. Thiết lập RESTART (SLEEP phải bằng 0 trước đó – đây là một lỗi thường gặp)
     writeReg(REG_MODE1, (mode & ~M1_SLEEP) | M1_RESTART | M1_AI);
 }
 
@@ -70,7 +70,7 @@ void PCA9685::setChannel(uint8_t ch, uint16_t onTick, uint16_t offTick) {
 }
 
 void PCA9685::setPulseUs(uint8_t ch, uint16_t us) {
-    // counts = us * 4096 / 20000  (rounded)
+    // số đếm (counts) = us * 4096 / 20000 (được làm tròn)
     uint16_t counts = (uint16_t)(((uint32_t)us * PWM_STEPS + PERIOD_US / 2) / PERIOD_US);
     setChannel(ch, 0, counts);
 }
@@ -86,7 +86,7 @@ void PCA9685::wake() {
     writeReg(REG_MODE1, m | M1_RESTART);
 }
 
-// ── Private helpers ──────────────────────────────────────────
+// ── Các hàm hỗ trợ nội bộ (Private helpers) ──────────────────────────────────────────
 
 void PCA9685::writeReg(uint8_t reg, uint8_t val) {
     Wire.beginTransmission(_addr);
@@ -98,7 +98,7 @@ void PCA9685::writeReg(uint8_t reg, uint8_t val) {
 uint8_t PCA9685::readReg(uint8_t reg) {
     Wire.beginTransmission(_addr);
     Wire.write(reg);
-    Wire.endTransmission(false);                 // repeated start
+    Wire.endTransmission(false);                 // khởi động lại (repeated start)
     Wire.requestFrom(_addr, (uint8_t)1);
     return Wire.available() ? Wire.read() : 0;
 }
